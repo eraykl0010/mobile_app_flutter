@@ -1,0 +1,54 @@
+name: online_pdks
+description: OnlinePDKS - Personel Devam Kontrol Sistemi
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP & API
+  dio: ^5.4.0
+
+  # Yerel Depolama
+  shared_preferences: ^2.2.2
+
+  # Konum Servisleri
+  geolocator: ^11.0.0
+
+  # QR Kod Okuma & Oluşturma
+  mobile_scanner: ^5.1.1
+  qr_flutter: ^4.1.0
+
+  # Tarih Formatlama
+  intl: ^0.19.0
+
+  # Cihaz Bilgisi
+  device_info_plus: ^10.1.0
+
+  # Bağlantı Kontrolü
+  connectivity_plus: ^6.0.3
+  permission_handler: ^12.0.1
+  android_id: ^0.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo.png
+    
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#FF6D00"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+    
