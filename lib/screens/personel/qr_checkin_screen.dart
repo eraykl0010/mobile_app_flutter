@@ -8,7 +8,8 @@ import '../../constants/app_theme.dart';
 import '../../constants/app_strings.dart';
 import '../../constants/app_constants.dart';
 import '../../models/check_in_out_request.dart';
-import '../../widgets/common_widgets.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 /// activity_qr_checkin.xml birebir karşılığı
 class QrCheckInScreen extends StatefulWidget {
@@ -77,16 +78,37 @@ class _QrCheckInScreenState extends State<QrCheckInScreen> with SingleTickerProv
     } catch (e) { if (mounted) setState(() { _scanResult = 'Hata: $e'; _processing = false; }); }
   }
 
-  void _genQr() {
+void _genQr() {
     _timer?.cancel();
-    final ts = DateTime.now().millisecondsSinceEpoch;
+
+    // 1. C# tarafıyla tamamen aynı olması gereken gizli anahtarınız
+    const String secretKey = "ErdemPdks_2026_!SecureKey";
+    
+    // 2. Dinamik veriler
+    final int ts = DateTime.now().millisecondsSinceEpoch;
+    final int personnelId = sessionManager.personnelId;
+
+    // 3. Güvenlik İmzası (Hash) Oluşturma
+    // Personel ID, Timestamp ve SecretKey'i birleştirip SHA-256 ile şifreliyoruz.
+    final String rawData = "$personnelId$ts$secretKey";
+    final bytes = utf8.encode(rawData);
+    final String signature = sha256.convert(bytes).toString(); // Küçük harflerle hex formatında imza üretir
+
     setState(() {
-      _qrData = 'PDKS_CHECKIN|${sessionManager.personnelId}|${sessionManager.cardNo}|$ts|${_lat.toStringAsFixed(6)},${_lng.toStringAsFixed(6)}|${sessionManager.personnelId}';
+      // 4. Yeni güvenli QR Formatı: PDKS_CHECKIN | PersonelId | İmza | Timestamp
+      _qrData = 'PDKS_CHECKIN|$personnelId|$signature|$ts';
       _countdown = _validity;
     });
+
+    // Geri sayım sayacı
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_countdown <= 1) { t.cancel(); setState(() { _countdown = 0; _qrData = ''; }); }
-      else setState(() => _countdown--);
+      if (_countdown <= 1) { 
+        t.cancel(); 
+        setState(() { _countdown = 0; _qrData = ''; }); 
+      }
+      else {
+        setState(() => _countdown--);
+      }
     });
   }
 

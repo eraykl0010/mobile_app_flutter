@@ -100,6 +100,12 @@ class AppStrings {
   static const String btnCancel = 'İptal';
   static const String btnOk = 'Tamam';
 
+  // Puantaj
+  static const String puantajTitle = 'Puantaj Hesapla';
+  static const String puantajCalculating = 'Puantaj hesaplanıyor…';
+  static const String puantajSuccess = 'Puantaj başarıyla hesaplandı';
+  static const String puantajFailed = 'Puantaj hesaplanamadı';
+
   // Personel Detay
   static const String personnelListTitle = 'Personel Listesi';
   static const String deviceResetOption = 'Cihaz Kaydını Sıfırla';

@@ -117,6 +117,15 @@ class ApiService {
     return (resp.data as List).map((e) => LateEarlyRecord.fromJson(e)).toList();
   }
 
+  Future<ApiResponse> calculateDailyAttendance({DateTime? startDate, DateTime? endDate, int? personnelId}) async {
+    final params = <String, dynamic>{};
+    if (startDate != null) params['baslangicTarihi'] = startDate.toIso8601String();
+    if (endDate != null) params['bitisTarihi'] = endDate.toIso8601String();
+    if (personnelId != null) params['personelId'] = personnelId;
+    final resp = await _dio.post(ApiConfig.calculateDailyAttendance, queryParameters: params);
+    return ApiResponse.fromJson(resp.data);
+  }
+
   // ══════════ PERSONEL ══════════
 
   Future<List<AttendanceRecord>> getDailyReport(int personnelId) async {

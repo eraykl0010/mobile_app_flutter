@@ -14,6 +14,7 @@ class ApiConfig {
   static const String approveRequest = 'patron/approve-request';
   static const String rejectRequest = 'patron/reject-request';
   static const String lateEarlyReport = 'patron/late-early-report';
+  static const String calculateDailyAttendance = 'calculate-daily-attendance';
 
   // PERSONEL
   static const String dailyReport = 'personel/daily-report';

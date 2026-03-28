@@ -24,6 +24,7 @@ class _PatronDashboardScreenState extends State<PatronDashboardScreen> {
   int? _selectedDeptId;
   int _annualC = 0, _dailyC = 0, _hourlyC = 0, _advanceC = 0;
   int _overtimeC = 0, _undertimeC = 0;
+  bool _puantajLoading = false;
 
   @override
   void initState() { super.initState(); _loadAll(); }
@@ -36,6 +37,36 @@ class _PatronDashboardScreenState extends State<PatronDashboardScreen> {
   }
 
   Future<void> _loadDepts() async { try { _depts = await apiService.getDepartments(); } catch (_) {} }
+
+  Future<void> _calculatePuantaj() async {
+    setState(() => _puantajLoading = true);
+    try {
+      final now = DateTime.now();
+      final resp = await apiService.calculateDailyAttendance(startDate: now, endDate: now);
+      if (!mounted) return;
+      if (resp.success) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(resp.message ?? AppStrings.puantajSuccess),
+          backgroundColor: AppColors.statusSuccess,
+        ));
+        await _loadAll();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(resp.message ?? AppStrings.puantajFailed),
+          backgroundColor: AppColors.statusDanger,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${AppStrings.puantajFailed}: $e'),
+          backgroundColor: AppColors.statusDanger,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _puantajLoading = false);
+    }
+  }
   Future<void> _loadSummary() async { try { _summary = await apiService.getDashboardSummary(departmentId: _selectedDeptId); } catch (_) {} }
   Future<void> _loadOvertime() async {
     try {
@@ -70,6 +101,13 @@ class _PatronDashboardScreenState extends State<PatronDashboardScreen> {
               padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingMd),
               child: Row(children: [
                 const Expanded(child: Text('Patron Paneli', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.white))),
+                _puantajLoading
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white))
+                    : GestureDetector(
+                        onTap: _calculatePuantaj,
+                        child: const Tooltip(message: AppStrings.puantajTitle, child: Icon(Icons.refresh, color: AppColors.white)),
+                      ),
+                const SizedBox(width: AppDimens.spacingMd),
                 GestureDetector(onTap: _confirmLogout, child: const Icon(Icons.close, color: AppColors.white)),
               ]),
             ),
