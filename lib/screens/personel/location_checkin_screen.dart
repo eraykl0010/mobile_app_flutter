@@ -15,7 +15,7 @@ class LocationCheckInScreen extends StatefulWidget {
   State<LocationCheckInScreen> createState() => _LocationCheckInScreenState();
 }
 
-class _LocationCheckInScreenState extends State<LocationCheckInScreen> {
+class _LocationCheckInScreenState extends State<LocationCheckInScreen> with WidgetsBindingObserver {
   double _lat = 0, _lng = 0;
   bool _locationReady = false, _isLoading = false, _btnEnabled = false;
   String _status = 'Konum alınıyor...';
@@ -25,9 +25,29 @@ class _LocationCheckInScreenState extends State<LocationCheckInScreen> {
   Color _resultColor = AppColors.statusSuccess;
   Timer? _clock;
   StreamSubscription<Position>? _posSub;
+  Timer? _locTimeout;
 
   @override
-  void initState() { super.initState(); _startClock(); _requestLocation(); }
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startClock();
+    _requestLocation();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      // Arka plana geçince kaynakları durdur
+      _clock?.cancel();
+      _posSub?.cancel();
+      _locTimeout?.cancel();
+    } else if (state == AppLifecycleState.resumed) {
+      // Ön plana dönünce tekrar başlat
+      _startClock();
+      if (!_locationReady) _requestLocation();
+    }
+  }
 
   void _startClock() {
     _tick();
@@ -45,7 +65,7 @@ class _LocationCheckInScreenState extends State<LocationCheckInScreen> {
     if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
     if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) { setState(() => _status = AppStrings.locationPermissionRequired); return; }
 
-    _posSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 5))
+    _posSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10))
         .listen((pos) {
       if (pos.isMocked) { setState(() { _status = AppStrings.locationMockDetected; _locationReady = false; _btnEnabled = false; }); return; }
       setState(() {
@@ -53,7 +73,19 @@ class _LocationCheckInScreenState extends State<LocationCheckInScreen> {
         _status = AppStrings.locationReady;
         _locationInfo = '${_lat.toStringAsFixed(6)}, ${_lng.toStringAsFixed(6)} (±${pos.accuracy.toStringAsFixed(0)}m)';
       });
-      if (pos.accuracy <= 50) _posSub?.cancel();
+      // Yeterli doğruluk sağlandığında stream'i kapat — pil tasarrufu
+      if (pos.accuracy <= 100) {
+        _posSub?.cancel();
+        _locTimeout?.cancel();
+      }
+    });
+
+    // 30 saniye içinde konum alınamazsa stream'i kapat
+    _locTimeout = Timer(const Duration(seconds: 30), () {
+      if (!_locationReady) {
+        _posSub?.cancel();
+        if (mounted) setState(() => _status = 'Konum alınamadı. Tekrar denemek için geri dönüp tekrar açın.');
+      }
     });
   }
 
@@ -69,12 +101,18 @@ class _LocationCheckInScreenState extends State<LocationCheckInScreen> {
         if (resp.success) Future.delayed(const Duration(seconds: 3), () { if (mounted) setState(() => _btnEnabled = true); });
         else setState(() => _btnEnabled = true);
       }
-    } catch (e) { if (mounted) setState(() { _result = 'Hata: $e'; _resultColor = AppColors.statusDanger; _btnEnabled = true; }); }
+    } catch (e) { if (mounted) setState(() { _result = 'İşlem sırasında bir hata oluştu. Lütfen tekrar deneyin.'; _resultColor = AppColors.statusDanger; _btnEnabled = true; }); }
     finally { if (mounted) setState(() => _isLoading = false); }
   }
 
   @override
-  void dispose() { _clock?.cancel(); _posSub?.cancel(); super.dispose(); }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _clock?.cancel();
+    _posSub?.cancel();
+    _locTimeout?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

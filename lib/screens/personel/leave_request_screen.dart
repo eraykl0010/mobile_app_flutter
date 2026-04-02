@@ -68,7 +68,7 @@ class _LeaveFormState extends State<_LeaveForm> {
           reason: _reason.text.isEmpty ? '-' : _reason.text);
       final resp = await apiService.submitLeaveRequest(req);
       if (mounted) { _msg(resp.success ? AppStrings.leaveRequestSent : (resp.message ?? AppStrings.errorSubmitFailed)); if (resp.success) { _startD.clear(); _endD.clear(); _startT.clear(); _endT.clear(); _reason.clear(); setState(() => _typeIdx = 0); } }
-    } catch (e) { if (mounted) _msg('Hata: $e'); }
+    } catch (e) { if (mounted) _msg('İşlem sırasında bir hata oluştu. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.'); }
     finally { if (mounted) setState(() => _loading = false); }
   }
 

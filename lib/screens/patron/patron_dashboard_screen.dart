@@ -59,7 +59,7 @@ class _PatronDashboardScreenState extends State<PatronDashboardScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${AppStrings.puantajFailed}: $e'),
+          content: Text('${AppStrings.puantajFailed}. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.'),
           backgroundColor: AppColors.statusDanger,
         ));
       }

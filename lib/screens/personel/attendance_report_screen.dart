@@ -74,7 +74,7 @@ class _AttItem extends StatelessWidget {
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Text('Giriş: ', style: TextStyle(fontSize: AppDimens.textCaption, color: AppColors.textHint)),
-            Text(r.checkIn ?? '08:00', style: const TextStyle(fontSize: AppDimens.textBody, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            Text(r.checkIn ?? '--:--', style: const TextStyle(fontSize: AppDimens.textBody, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             Text('  Çıkış: ', style: TextStyle(fontSize: AppDimens.textCaption, color: AppColors.textHint)),
             Text(r.checkOut ?? '--:--', style: const TextStyle(fontSize: AppDimens.textBody, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           ]),

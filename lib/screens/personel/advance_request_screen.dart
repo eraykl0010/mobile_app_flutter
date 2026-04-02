@@ -51,7 +51,7 @@ class _AdvFormState extends State<_AdvForm> {
       final req = AdvanceSubmitRequest(personnelId: sessionManager.personnelId, amount: amt, reason: _resC.text.isEmpty ? '-' : _resC.text);
       final resp = await apiService.submitAdvanceRequest(req);
       if (mounted) { _msg(resp.success ? AppStrings.advanceRequestSent : (resp.message ?? AppStrings.errorSubmitFailed)); if (resp.success) { _amtC.clear(); _resC.clear(); } }
-    } catch (e) { if (mounted) _msg('Hata: $e'); }
+    } catch (e) { if (mounted) _msg('İşlem sırasında bir hata oluştu. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.'); }
     finally { if (mounted) setState(() => _loading = false); }
   }
 

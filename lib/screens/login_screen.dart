@@ -162,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ));
         } else { _showError(msg); }
       }
-    } catch (e) { if (mounted) _showError('Bağlantı hatası: $e'); }
+    } catch (e) { if (mounted) _showError('Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.'); }
     finally { if (mounted) setState(() => _isLoading = false); }
   }
 

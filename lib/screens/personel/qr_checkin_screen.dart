@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../main.dart';
 import '../../constants/app_theme.dart';
@@ -18,7 +19,7 @@ class QrCheckInScreen extends StatefulWidget {
   State<QrCheckInScreen> createState() => _QrCheckInScreenState();
 }
 
-class _QrCheckInScreenState extends State<QrCheckInScreen> with SingleTickerProviderStateMixin {
+class _QrCheckInScreenState extends State<QrCheckInScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tab;
   double _lat = 0, _lng = 0;
   bool _locReady = false, _processing = false;
@@ -30,29 +31,208 @@ class _QrCheckInScreenState extends State<QrCheckInScreen> with SingleTickerProv
   int _countdown = 0;
   Timer? _timer;
   StreamSubscription<Position>? _posSub;
+  Timer? _locTimeout;
+  bool _locDialogShown = false;
+  bool _isRequestingLoc = false;
+  bool _cameraAllowed = false;
   static const _validity = 30;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tab = TabController(length: 2, vsync: this);
     _tab.addListener(() { if (_tab.index == 1 && _qrData.isEmpty) _genQr(); });
-    _requestLoc();
+    _initPermissions();
+  }
+
+  /// Kamera ve konum izinlerini sıralı olarak iste
+  Future<void> _initPermissions() async {
+    // 1. Önce kamera izni
+    await _requestCameraPermission();
+    // 2. Sonra konum izni (kamera sonucundan bağımsız)
+    await _requestLoc();
+  }
+
+  Future<void> _requestCameraPermission() async {
+    var status = await Permission.camera.status;
+    if (status.isDenied) {
+      status = await Permission.camera.request();
+    }
+    if (mounted) {
+      setState(() => _cameraAllowed = status.isGranted || status.isLimited);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _posSub?.cancel();
+      _timer?.cancel();
+      _locTimeout?.cancel();
+    } else if (state == AppLifecycleState.resumed) {
+      // Ön plana dönünce izinleri sessizce kontrol et
+      _silentPermissionCheck();
+    }
+  }
+
+  /// Kullanıcı ayarlardan izin verdiyse güncelle — dialog göstermeden
+  Future<void> _silentPermissionCheck() async {
+    // Kamera izni kontrolü
+    if (!_cameraAllowed) {
+      final camStatus = await Permission.camera.status;
+      if (mounted && (camStatus.isGranted || camStatus.isLimited)) {
+        setState(() => _cameraAllowed = true);
+      }
+    }
+
+    // Konum izni kontrolü
+    if (!_locReady && !_isRequestingLoc) {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      final p = await Geolocator.checkPermission();
+      if (p == LocationPermission.whileInUse || p == LocationPermission.always) {
+        _locDialogShown = false;
+        _startLocStream();
+      }
+    }
   }
 
   Future<void> _requestLoc() async {
-    final p = await Geolocator.requestPermission();
-    if (p == LocationPermission.denied || p == LocationPermission.deniedForever) return;
-    _posSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 5))
+    if (_isRequestingLoc) return;
+    _isRequestingLoc = true;
+    try {
+      // Konum servisi açık mı kontrol et
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          setState(() {
+            _scanLocInfo = 'Konum servisi kapalı';
+            _genLocInfo = 'Konum servisi kapalı';
+          });
+          if (!_locDialogShown) {
+            _showLocationDialog(
+              title: 'Konum Servisi Kapalı',
+              message: 'Giriş/çıkış işlemi yapabilmek için cihazınızın konum servisini açmanız gerekmektedir.',
+            );
+          }
+        }
+        return;
+      }
+
+      var p = await Geolocator.checkPermission();
+      if (p == LocationPermission.denied) {
+        p = await Geolocator.requestPermission();
+      }
+
+      if (p == LocationPermission.denied) {
+        if (mounted) {
+          setState(() {
+            _scanLocInfo = 'Konum izni reddedildi';
+            _genLocInfo = 'Konum izni reddedildi';
+          });
+          if (!_locDialogShown) {
+            _showLocationDialog(
+              title: 'Konum İzni Gerekli',
+              message: 'QR ile giriş/çıkış yapabilmek için konum iznine ihtiyaç vardır. Lütfen izin verin.',
+              showRetry: true,
+            );
+          }
+        }
+        return;
+      }
+
+      if (p == LocationPermission.deniedForever) {
+        if (mounted) {
+          setState(() {
+            _scanLocInfo = 'Konum izni kalıcı olarak reddedildi';
+            _genLocInfo = 'Konum izni kalıcı olarak reddedildi';
+          });
+          if (!_locDialogShown) {
+            _showLocationDialog(
+              title: 'Konum İzni Gerekli',
+              message: 'Konum izni kalıcı olarak reddedilmiş. Lütfen uygulama ayarlarından konum iznini etkinleştirin.',
+              showSettings: true,
+            );
+          }
+        }
+        return;
+      }
+
+      // İzin verildi — stream başlat
+      _startLocStream();
+    } finally {
+      _isRequestingLoc = false;
+    }
+  }
+
+  /// Konum stream'ini başlat (izin kontrolü yapılmış varsayılır)
+  void _startLocStream() {
+    _posSub?.cancel();
+    _locTimeout?.cancel();
+
+    _posSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10))
         .listen((pos) {
-      if (pos.isMocked) { setState(() => _locReady = false); return; }
+      if (pos.isMocked) {
+        setState(() {
+          _locReady = false;
+          _scanLocInfo = AppStrings.locationMockDetected;
+          _genLocInfo = AppStrings.locationMockDetected;
+        });
+        return;
+      }
       setState(() {
         _lat = pos.latitude; _lng = pos.longitude; _locReady = true;
         final info = 'Konum hazır (±${pos.accuracy.toStringAsFixed(0)}m)';
         _scanLocInfo = info; _genLocInfo = info;
       });
-      if (pos.accuracy <= 50) _posSub?.cancel();
+      if (pos.accuracy <= 100) {
+        _posSub?.cancel();
+        _locTimeout?.cancel();
+      }
     });
+
+    _locTimeout = Timer(const Duration(seconds: 30), () {
+      if (!_locReady) {
+        _posSub?.cancel();
+        if (mounted) setState(() {
+          _scanLocInfo = 'Konum alınamadı';
+          _genLocInfo = 'Konum alınamadı';
+        });
+      }
+    });
+  }
+
+  void _showLocationDialog({required String title, required String message, bool showRetry = false, bool showSettings = false}) {
+    _locDialogShown = true;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          if (showSettings)
+            TextButton(
+              onPressed: () { Navigator.pop(context); Geolocator.openAppSettings(); },
+              child: const Text('Ayarları Aç'),
+            ),
+          if (showRetry)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _locDialogShown = false;
+                _requestLoc();
+              },
+              child: const Text('Tekrar Dene'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(AppStrings.btnOk),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onDetect(BarcodeCapture c) {
@@ -75,7 +255,7 @@ class _QrCheckInScreenState extends State<QrCheckInScreen> with SingleTickerProv
         _scanStatus = resp.success ? AppStrings.qrOperationComplete : _scanStatus;
         if (!resp.success) Future.delayed(const Duration(seconds: 3), () { _processing = false; });
       });
-    } catch (e) { if (mounted) setState(() { _scanResult = 'Hata: $e'; _processing = false; }); }
+    } catch (e) { if (mounted) setState(() { _scanResult = 'İşlem sırasında bir hata oluştu. Lütfen tekrar deneyin.'; _processing = false; }); }
   }
 
 void _genQr() {
@@ -113,7 +293,14 @@ void _genQr() {
   }
 
   @override
-  void dispose() { _tab.dispose(); _timer?.cancel(); _posSub?.cancel(); super.dispose(); }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _tab.dispose();
+    _timer?.cancel();
+    _posSub?.cancel();
+    _locTimeout?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -130,21 +317,44 @@ void _genQr() {
   }
 
   Widget _scanTab() => Column(children: [
-    Expanded(child: Stack(children: [
-      MobileScanner(
-        onDetect: _onDetect,
-        errorBuilder: (context, error, child) {
-          return Center(
-            child: Text('Kamera başlatılamadı:\n${error.errorDetails?.message ?? error.errorCode}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white)),
-          );
-        },
-      ),      Positioned(top: 0, left: 0, right: 0, child: Container(
-        color: Colors.black54, padding: const EdgeInsets.all(AppDimens.spacingMd),
-        child: const Text('Giriş kapısındaki QR kodu okutun', textAlign: TextAlign.center, style: TextStyle(color: AppColors.white, fontSize: AppDimens.textBody)),
-      )),
-    ])),
+    Expanded(child: _cameraAllowed
+      ? Stack(children: [
+          MobileScanner(
+            onDetect: _onDetect,
+            errorBuilder: (context, error, child) {
+              return Container(
+                color: Colors.black87,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppDimens.spacingLg),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, color: AppColors.white, size: 64),
+                        const SizedBox(height: AppDimens.spacingMd),
+                        const Text('Kamera Başlatılamadı',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: AppDimens.spacingSm),
+                        Text('Kamera açılırken bir sorun oluştu. Lütfen tekrar deneyin.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.white.withOpacity(0.8), fontSize: AppDimens.textBody),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          Positioned(top: 0, left: 0, right: 0, child: Container(
+            color: Colors.black54, padding: const EdgeInsets.all(AppDimens.spacingMd),
+            child: const Text('Giriş kapısındaki QR kodu okutun', textAlign: TextAlign.center, style: TextStyle(color: AppColors.white, fontSize: AppDimens.textBody)),
+          )),
+        ])
+      : _cameraPermissionDeniedWidget(),
+    ),
     Container(color: AppColors.white, padding: const EdgeInsets.all(AppDimens.spacingMd), child: Column(children: [
       Text(_scanStatus, style: TextStyle(fontSize: AppDimens.textSubtitle, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
       const SizedBox(height: 4),
@@ -154,6 +364,44 @@ void _genQr() {
               color: _scanResult.contains('Gönderildi') ? AppColors.statusSuccess : AppColors.statusDanger))),
     ])),
   ]);
+
+  Widget _cameraPermissionDeniedWidget() {
+    return Container(
+      color: Colors.black87,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimens.spacingLg),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.no_photography, color: AppColors.white, size: 64),
+              const SizedBox(height: AppDimens.spacingMd),
+              const Text('Kamera İzni Gerekli',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: AppDimens.spacingSm),
+              Text(
+                'QR kod okutabilmek için kamera iznine ihtiyaç vardır.\nLütfen uygulama ayarlarından kamera iznini etkinleştirin.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.white.withOpacity(0.8), fontSize: AppDimens.textBody),
+              ),
+              const SizedBox(height: AppDimens.spacingLg),
+              SizedBox(
+                width: 200,
+                height: AppDimens.buttonHeight,
+                child: ElevatedButton.icon(
+                  onPressed: () => openAppSettings(),
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Ayarları Aç'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _genTab() => SingleChildScrollView(
     padding: const EdgeInsets.all(AppDimens.spacingLg),
