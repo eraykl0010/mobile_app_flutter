@@ -53,18 +53,27 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+
+	<!-- ══════ İzin Açıklamaları ══════ -->
+	<key>NSCameraUsageDescription</key>
+	<string>QR kod okutarak giriş/çıkış yapabilmek için kamera erişimi gereklidir.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Giriş/çıkış kaydı oluşturabilmek için konumunuza erişim gereklidir.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Giriş/çıkış kaydı oluşturabilmek için konumunuza erişim gereklidir.</string>
+
+	<!-- ══════ Export Compliance ══════ -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
+	<!-- ══════ Yönlendirme — Sadece Dikey ══════ -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>

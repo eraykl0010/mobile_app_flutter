@@ -32,7 +32,9 @@ dependencies:
   # Bağlantı Kontrolü
   connectivity_plus: ^6.0.3
   permission_handler: ^12.0.1
-  android_id: ^0.5.1
+
+  # QR Güvenlik İmzası
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:
@@ -51,4 +53,3 @@ flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#FF6D00"
   adaptive_icon_foreground: "assets/icon/app_icon.png"
-    

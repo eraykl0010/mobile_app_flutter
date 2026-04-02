@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../constants/api_config.dart';
+import '../constants/app_strings.dart';
 import '../models/login_request.dart';
 import '../models/login_response.dart';
 import '../models/api_response.dart';
@@ -20,9 +22,20 @@ import '../models/monthly_overtime.dart';
 import '../models/reset_device_request.dart';
 import 'session_manager.dart';
 
+/// Kullanıcı dostu API hata sınıfı
+class ApiException implements Exception {
+  final String message;
+  ApiException(this.message);
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   late Dio _dio;
   final SessionManager _session;
+
+  /// 401 oturum süresi dolduğunda çağrılacak callback
+  VoidCallback? onSessionExpired;
 
   ApiService(this._session) {
     _dio = Dio(BaseOptions(
@@ -35,9 +48,21 @@ class ApiService {
       },
     ));
 
-    // Auth interceptor
+    // Auth interceptor + bağlantı kontrolü
     _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
+      onRequest: (options, handler) async {
+        // İnternet bağlantısı kontrolü
+        final connectivity = await Connectivity().checkConnectivity();
+        if (connectivity.contains(ConnectivityResult.none)) {
+          return handler.reject(
+            DioException(
+              requestOptions: options,
+              type: DioExceptionType.connectionError,
+              error: AppStrings.errorNoInternet,
+            ),
+          );
+        }
+
         final token = _session.token;
         if (token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -50,12 +75,41 @@ class ApiService {
       },
       onError: (error, handler) {
         if (error.response?.statusCode == 401) {
-          // Oturum süresi dolmuş — ana ekrana yönlendir
-          debugPrint('401 Unauthorized — session expired');
+          onSessionExpired?.call();
         }
-        return handler.next(error);
+        // Dio hatasını kullanıcı dostu mesaja çevir
+        final friendlyError = DioException(
+          requestOptions: error.requestOptions,
+          response: error.response,
+          type: error.type,
+          error: _friendlyErrorMessage(error),
+        );
+        return handler.next(friendlyError);
       },
     ));
+  }
+
+  /// Dio hatasını kullanıcı dostu Türkçe mesaja çevirir
+  String _friendlyErrorMessage(DioException error) {
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'Sunucuya bağlanırken zaman aşımı oluştu. Lütfen tekrar deneyin.';
+      case DioExceptionType.connectionError:
+        return 'İnternet bağlantısı kurulamadı. Lütfen bağlantınızı kontrol edin.';
+      case DioExceptionType.badResponse:
+        final code = error.response?.statusCode ?? 0;
+        if (code == 401) return AppStrings.errorSessionExpired;
+        if (code == 403) return 'Bu işlem için yetkiniz bulunmamaktadır.';
+        if (code == 404) return 'İstenen kaynak bulunamadı.';
+        if (code >= 500) return 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.';
+        return 'Bir hata oluştu (HTTP $code).';
+      case DioExceptionType.cancel:
+        return 'İstek iptal edildi.';
+      default:
+        return 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.';
+    }
   }
 
   // ══════════ AUTH ══════════

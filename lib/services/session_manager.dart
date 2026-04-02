@@ -124,6 +124,14 @@ class SessionManager {
 
   bool get isPersonelLocked => isLoggedIn && moduleType == ModuleType.personel;
 
+  Future<void> logoutPersonel() async {
+    final devId = _prefs.getString(_keyDeviceId);
+    final mac = _prefs.getString(_keyMacAddress);
+    await _prefs.clear();
+    if (devId != null) await _prefs.setString(_keyDeviceId, devId);
+    if (mac != null) await _prefs.setString(_keyMacAddress, mac);
+  }
+
   // ══════════ GETTER'LAR ══════════
 
   bool get isLoggedIn => _prefs.getBool(_keyIsLoggedIn) ?? false;

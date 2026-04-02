@@ -1,4 +1,4 @@
-package com.example.online_pdks
+package tr.com.onlinepdks.mobile
 
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
